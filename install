@@ -1,0 +1,214 @@
+#!/bin/bash
+#adwpc
+#it will update your packages !
+
+OBJ=""
+BE="NO"
+FE="NO"
+NVIM="NO"
+
+if [ -f /etc/os-release ]; then
+    # freedesktop.org and systemd
+    . /etc/os-release
+    CPU=`cat /proc/cpuinfo | grep "processor" | wc -l`
+    MEM=`free -b|grep "Mem"|awk -F' ' '{print $2}'`
+    OS_TYPE=$NAME
+    unset NAME
+    OS_VER=$VERSION_ID
+elif type lsb_release >/dev/null 2>&1; then
+    # linuxbase.org
+    CPU=`cat /proc/cpuinfo | grep "processor" | wc -l`
+    MEM=`free -b|grep "Mem"|awk -F' ' '{print $2}'`
+    OS_TYPE=$(lsb_release -si)
+    OS_VER=$(lsb_release -sr)
+elif [ -f /etc/lsb-release ]; then
+    # For some versions of Debian/Ubuntu without lsb_release command
+    . /etc/lsb-release
+    CPU=`cat /proc/cpuinfo | grep "processor" | wc -l`
+    MEM=`free -b|grep "Mem"|awk -F' ' '{print $2}'`
+    OS_TYPE=$DISTRIB_ID
+    OS_VER=$DISTRIB_RELEASE
+elif [ -f /etc/debian_version ]; then
+    # Older Debian/Ubuntu/etc.
+    CPU=`cat /proc/cpuinfo | grep "processor" | wc -l`
+    MEM=`free -b|grep "Mem"|awk -F' ' '{print $2}'`
+    OS_TYPE=Debian
+    OS_VER=$(cat /etc/debian_version)
+elif [ -f /etc/SuSe-release ]; then
+    # Older SuSE/etc.
+    CPU=`cat /proc/cpuinfo | grep "processor" | wc -l`
+    MEM=`free -b|grep "Mem"|awk -F' ' '{print $2}'`
+    ...
+elif [ -f /etc/redhat-release ]; then
+    # Older Red Hat, CentOS, etc.
+    CPU=`cat /proc/cpuinfo | grep "processor" | wc -l`
+    MEM=`free -b|grep "Mem"|awk -F' ' '{print $2}'`
+    ...
+else
+    # Fall back to uname, e.g. "Linux <version>", also works for BSD, etc.
+    OS_TYPE=$(uname -s)
+    OS_VER=$(uname -r)
+    CPU=`sysctl -n machdep.cpu.thread_count`
+    MEM=`sysctl -n hw.memsize`
+fi
+
+
+
+function config()
+{
+    read -r -p "Support go c/c++? [Y/n]" input
+    
+    case $input in
+    [yY][eE][sS] | [yY])
+        BE="YES"
+        ;;
+    
+    [nN][oO] | [nN]) ;;
+    
+    \
+        *)
+        echo "Invalid input..."
+        exit 1
+        ;;
+    esac
+    
+    read -r -p "Support javascript/html? [Y/n] " input
+    case $input in
+    [yY][eE][sS] | [yY])
+        FE="YES"
+        ;;
+    
+    [nN][oO] | [nN]) ;;
+    
+    \
+        *)
+        echo "Invalid input..."
+        exit 1
+        ;;
+    esac
+
+    read -r -p "Install NeoVim(recommend)? [Y/n] " input
+    case $input in
+    [yY][eE][sS] | [yY])
+        NVIM="YES"
+        ;;
+    
+    [nN][oO] | [nN]) ;;
+    
+    \
+        *)
+        echo "Invalid input..."
+        exit 1
+        ;;
+    esac
+}
+
+function vimrc_dep_inst()
+{
+   if [[ "$OS_TYPE" =~ "CentOS" ]];then
+       if [[ "$BE" == "YES" ]];then
+           sudo yum -y install epel-release
+           sudo yum install -y ctags cscope cmake python-devel git python python-pip gcc gcc-c++
+
+       fi
+       if [[ "$FE" == "YES" ]];then
+           sudo yum install -y nodejs
+           # support js html autoformat autocomplete syntastic
+           sudo npm --registry https://registry.npm.taobao.org install -g eslint eslint-plugin-import eslint-plugin-node eslint-plugin-promise eslint-plugin-standard eslint-config-standard js-beautify
+       fi
+   fi
+
+   if [[ "$OS_TYPE" == "Ubuntu" ]];then
+       if [[ "$BE" == "YES" ]];then
+           sudo apt-get install -y ctags cscope cmake python-dev git python python-pip gcc g++
+       fi
+       if [[ "$FE" == "YES" ]];then
+           curl -sL https://deb.nodesource.com/setup_8.x | sudo -E bash -
+           sudo apt-get install -y nodejs
+           # support js html autoformat autocomplete syntastic
+           sudo npm --registry https://registry.npm.taobao.org install -g eslint eslint-plugin-import eslint-plugin-node eslint-plugin-promise eslint-plugin-standard eslint-config-standard js-beautify
+      fi
+   fi
+
+   if [[ "$OS_TYPE" == "Darwin" ]];then
+       if [[ "$BE" == "YES" ]];then
+           brew install ctags cscope git
+       fi
+       if [[ "$FE" == "YES" ]];then
+           brew install nodejs
+           # support js html autoformat autocomplete syntastic
+           sudo npm --registry https://registry.npm.taobao.org install -g eslint eslint-plugin-import eslint-plugin-node eslint-plugin-promise eslint-plugin-standard eslint-config-standard js-beautify
+       fi
+   fi
+}
+
+function linux_nvim_inst()
+{
+    cd /tmp
+    wget https://github.com/neovim/neovim/releases/download/v0.4.3/nvim-linux64.tar.gz
+    sudo tar xf nvim-linux64.tar.gz -C /usr/local/
+    sudo mv /bin/vim /bin/vim.bak.`date +%Y%m%d%H%M%S`
+    sudo ln -s /usr/local/nvim-linux64/bin/nvim  /bin/vim
+    mv ~/.config/nvim ~/.config/nvim.bak.`date +%Y%m%d%H%M%S`
+    mv ~/.config/nvim/init.vim ~/.config/nvim/init.vim.bak.`date +%Y%m%d%H%M%S`
+    mkdir -p ~/.config
+    ln -s ~/.vim ~/.config/nvim
+    ln -s ~/.vimrc ~/.config/nvim/init.vim
+    sudo yum install -y python python3
+    sudo pip install pynvim
+    sudo pip3 install pynvim
+}
+
+function vim_inst()
+{
+    if [[ "$OS_TYPE" =~ "CentOS" && "$OS_VER" == "7" ]];then
+        linux_nvim_inst
+    fi
+
+    if [[ "$OS_TYPE" =~ "CentOS" && "$OS_VER" == "6" ]];then
+        linux_nvim_inst
+    fi
+
+    if [[ "$OS_TYPE" == "Ubuntu" ]];then
+        linux_nvim_inst
+    fi
+
+    if [[ "$OS_TYPE" == "Darwin" ]];then
+        brew install neovim
+        pip2 install neovim
+        pip3 install neovim
+    fi
+}
+
+
+function vimrc_inst()
+{
+    #install depends
+    config
+    vimrc_dep_inst
+
+    # install vim config and plugin
+    mv ~/.vimrc ~/.vimrc.bak.`date +%Y%m%d%H%M%S`
+    mv ~/.vim ~/.vim.bak.`date +%Y%m%d%H%M%S`
+    cp -rf .vimrc ~
+    cp -rf .vim ~
+    curl -fLo ~/.vim/autoload/plug.vim --create-dirs \
+    https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
+    vim -u ~/.vimrc -c ":PlugInstall" -c ":q" -c ":q"
+    
+    #install ycm
+    cd ~/.vim/plugged/YouCompleteMe/ ; git submodule update --init --recursive ; git submodule update --init --recursive ; ./install.py --all
+    vim_inst
+}
+
+
+if [ "$1" != ""  ];then
+    OBJ=$1
+fi
+case "$OBJ" in
+    vimrc) vimrc_inst;;
+
+    *)  echo "Usage: install {vimrc}" >&2
+        exit 1
+        ;;
+esac
